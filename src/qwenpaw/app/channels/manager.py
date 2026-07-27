@@ -61,7 +61,10 @@ async def _process_batch(ch: BaseChannel, batch: List[Any]) -> None:
         else:
             await ch.consume_one(batch[0])
     elif ch._is_native_payload(batch[0]):
-        await ch._consume_one_request(batch[0])
+        # Route single native payloads through consume_one() so channel-level
+        # time debounce can merge rapid follow-up messages before expensive
+        # processing starts.
+        await ch.consume_one(batch[0])
     else:
         await ch.consume_one(batch[0])
 
