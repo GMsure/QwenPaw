@@ -6,7 +6,12 @@ from qwenpaw.constant import (
     QWENPAW_MESSAGE_TAG_KEY,
 )
 from qwenpaw.runtime.message_convert import _request_input_to_msgs
-from qwenpaw.schemas import Message, Role, TextContent
+from qwenpaw.schemas import (
+    AudioContent,
+    Message,
+    Role,
+    TextContent,
+)
 
 
 def test_only_external_user_input_gets_query_tag():
@@ -28,3 +33,18 @@ def test_only_external_user_input_gets_query_tag():
         EXTERNAL_USER_QUERY_MESSAGE_TAG
     )
     assert QWENPAW_MESSAGE_TAG_KEY not in messages[1].metadata
+
+
+def test_audio_content_data_becomes_data_block():
+    messages = _request_input_to_msgs(
+        [
+            Message(
+                role=Role.USER,
+                content=[AudioContent(data="https://audio.example.com/a.mp3")],
+            ),
+        ],
+    )
+
+    blocks = messages[0].content
+    assert len(blocks) == 1
+    assert getattr(blocks[0], "source", None) is not None
