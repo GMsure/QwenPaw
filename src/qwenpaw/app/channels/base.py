@@ -1297,12 +1297,15 @@ class BaseChannel(ABC):
             role=Role.USER,
             content=content_parts,
         )
-        return AgentRequest(
+        request = AgentRequest(
             session_id=session_id,
             user_id=sender_id,
             input=[msg],
             channel=channel_id,
         )
+        if channel_meta is not None:
+            setattr(request, "channel_meta", dict(channel_meta))
+        return request
 
     def build_agent_request_from_native(
         self,
