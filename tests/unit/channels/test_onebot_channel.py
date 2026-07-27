@@ -37,6 +37,11 @@ def _make_channel(**overrides: Any) -> OneBotChannel:
     return OneBotChannel(**defaults)
 
 
+def test_onebot_uses_short_time_debounce():
+    ch = _make_channel()
+    assert ch._debounce_seconds == 2.0
+
+
 def _make_message_event(
     message_type: str = "private",
     user_id: int = 12345,
@@ -214,10 +219,13 @@ class TestHandleMessageEvent:
         await ch._handle_message_event(event)
 
         assert len(enqueued) == 1
-        req = enqueued[0]
-        assert req.session_id == "onebot:12345"
-        assert req.channel_meta["message_type"] == "private"
-        assert req.channel_meta["sender_id"] == "12345"
+        payload = enqueued[0]
+        assert isinstance(payload, dict)
+        assert payload["channel_id"] == "onebot"
+        assert payload["sender_id"] == "12345"
+        assert payload["acl_sender_id"] == "12345"
+        assert payload["meta"]["message_type"] == "private"
+        assert payload["meta"]["sender_id"] == "12345"
 
     async def test_group_message_enqueues(self):
         ch = _make_channel()
@@ -232,10 +240,12 @@ class TestHandleMessageEvent:
         await ch._handle_message_event(event)
 
         assert len(enqueued) == 1
-        req = enqueued[0]
-        assert req.session_id == "onebot:67890:12345"
-        assert req.channel_meta["is_group"] is True
-        assert req.channel_meta["group_id"] == "67890"
+        payload = enqueued[0]
+        assert isinstance(payload, dict)
+        assert payload["sender_id"] == "12345"
+        assert payload["acl_sender_id"] == "12345"
+        assert payload["meta"]["is_group"] is True
+        assert payload["meta"]["group_id"] == "67890"
 
     async def test_empty_message_ignored(self):
         ch = _make_channel()
@@ -663,6 +673,13 @@ class TestHandleEvent:
             _make_message_event(message_type="private", user_id=11111),
         )
         assert len(enqueued) == 1
+        payload = enqueued[0]
+        assert isinstance(payload, dict)
+        assert payload["channel_id"] == "onebot"
+        assert payload["sender_id"] == "11111"
+        assert payload["acl_sender_id"] == "11111"
+        assert payload["meta"]["is_group"] is False
+        assert len(payload["content_parts"]) == 1
 
     async def test_notice_event_ignored(self):
         ch = _make_channel()
@@ -693,6 +710,8 @@ class TestBuildAgentRequest:
         assert req.session_id == "onebot:12345"
         assert req.user_id == "12345"
         assert req.channel == "onebot"
+        assert req.channel_meta == {"is_group": False}
+        assert req.acl_sender_id == "12345"
         assert len(req.input) == 1
         assert req.input[0].content[0].text == "hi"
 
