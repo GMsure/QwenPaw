@@ -97,6 +97,11 @@ class OneBotChannel(BaseChannel):
         self._ws_port = ws_port
         self._access_token = access_token
         self._share_session_in_group = share_session_in_group
+        # Merge quick image/sticker + text/link follow-ups into one turn.
+        # This prevents slow vision calls from starting before the user's
+        # accompanying question arrives, while still allowing standalone media
+        # messages to be processed automatically after a short delay.
+        self._debounce_seconds = 2.0
 
         # WebSocket server state
         self._app: Optional[web.Application] = None
@@ -539,13 +544,10 @@ class OneBotChannel(BaseChannel):
         native = {
             "channel_id": self.channel,
             "sender_id": user_id,
+            "acl_sender_id": user_id,
             "content_parts": content_parts,
             "meta": meta,
         }
-
-        request = self.build_agent_request_from_native(native)
-        request.channel_meta = meta
-        request.acl_sender_id = user_id
 
         logger.info(
             "onebot recv %s from=%s%s text=%r",
@@ -556,7 +558,7 @@ class OneBotChannel(BaseChannel):
         )
 
         if self._enqueue is not None:
-            self._enqueue(request)
+            self._enqueue(native)
 
     # ------------------------------------------------------------------
     # Message segment parsing
@@ -716,13 +718,19 @@ class OneBotChannel(BaseChannel):
         content_parts = payload.get("content_parts") or []
         meta = payload.get("meta") or {}
         session_id = self.resolve_session_id(sender_id, meta)
-        return self.build_agent_request_from_user_content(
+        request = self.build_agent_request_from_user_content(
             channel_id=channel_id,
             sender_id=sender_id,
             session_id=session_id,
             content_parts=content_parts,
             channel_meta=meta,
         )
+        setattr(
+            request,
+            "acl_sender_id",
+            payload.get("acl_sender_id") or sender_id,
+        )
+        return request
 
     # ------------------------------------------------------------------
     # Session / routing
